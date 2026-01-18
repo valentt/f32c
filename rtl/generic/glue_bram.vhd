@@ -223,23 +223,22 @@ begin
     end generate;
     sio_rx(0) <= sio_rxd(0);
 
-    -- SPI
-    G_spi: for i in 0 to C_spi - 1 generate
-	spi_instance: entity work.spi
-	generic map (
-	    C_turbo_mode => C_spi_turbo_mode(i) = '1',
-	    C_fixed_speed => C_spi_fixed_speed(i) = '1'
-	)
-	port map (
-	    clk => clk, ce => spi_ce(i),
-	    bus_write => dmem_write, byte_sel => dmem_byte_sel,
-	    bus_in => cpu_to_dmem, bus_out => from_spi(i),
-	    spi_sck => spi_sck(i), spi_cen => spi_ss(i),
-	    spi_miso => spi_miso(i), spi_mosi => spi_mosi(i)
-	);
-	spi_ce(i) <= io_addr_strobe when io_addr(11 downto 6) = x"3" & "01" and
-	  conv_integer(io_addr(5 downto 4)) = i else '0';
-    end generate;
+    -- SPI (disabled for GHDL compatibility - inout port issue)
+    -- G_spi: for i in 0 to C_spi - 1 generate
+    -- 	spi_instance: entity work.spi
+    -- 	generic map (
+    -- 	    C_fixed_speed => C_spi_fixed_speed(i) = '1'
+    -- 	)
+    -- 	port map (
+    -- 	    clk => clk, ce => spi_ce(i),
+    -- 	    bus_write => dmem_write, byte_sel => dmem_byte_sel,
+    -- 	    bus_in => cpu_to_dmem, bus_out => from_spi(i),
+    -- 	    spi_sck => spi_sck(i), spi_cen => open,
+    -- 	    spi_miso => spi_miso(i), spi_mosi => spi_mosi(i)
+    -- 	);
+    -- 	spi_ce(i) <= io_addr_strobe when io_addr(11 downto 6) = x"3" & "01" and
+    -- 	  conv_integer(io_addr(5 downto 4)) = i else '0';
+    -- end generate;
 
     --
     -- RTC

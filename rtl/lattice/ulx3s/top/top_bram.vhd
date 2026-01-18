@@ -23,13 +23,12 @@
 -- OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 -- SUCH DAMAGE.
 --
+-- Modified for open-source toolchain (GHDL + Yosys + nextpnr)
+-- Hans Weber, 2026-01-18
 
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.std_logic_unsigned.all;
-
-library ecp5u;
-use ecp5u.components.all;
 
 use work.f32c_pack.all;
 
@@ -41,68 +40,38 @@ entity glue is
 	C_mul_reg: boolean := false;
 	C_debug: boolean := false;
 
-	C_clk_freq_hz: integer := 100000000;
+	C_clk_freq: integer := 100;
 
 	-- SoC configuration options
-	C_bram_size: integer := 128;
+	C_bram_size: integer := 32;
 	C_sio: integer := 1;
-	C_spi: integer := 3;
+	C_spi: integer := 0;  -- disabled for BRAM-only build
 	C_gpio: integer := 0;
 	C_simple_io: boolean := true;
-	C_timer: boolean := false
+	C_timer: boolean := true
     );
     port (
-	clk_25m: in std_logic;
-
-	-- SIO0 (FTDI)
-	rs232_tx: out std_logic;
-	rs232_rx: in std_logic;
-
-	-- On-board simple IO
+	clk_25mhz: in std_logic;
+	ftdi_rxd: out std_logic;  -- FPGA TX to FTDI
+	ftdi_txd: in std_logic;   -- FPGA RX from FTDI
 	led: out std_logic_vector(7 downto 0);
-	btn_pwr, btn_f1, btn_f2: in std_logic;
-	btn_up, btn_down, btn_left, btn_right: in std_logic;
+	btn: in std_logic_vector(6 downto 0);  -- 0=pwr,1=f1,2=f2,3=up,4=down,5=left,6=right
 	sw: in std_logic_vector(3 downto 0);
-
-	-- SPI flash (SPI #0)
-	flash_so: in std_logic;
-	flash_si: out std_logic;
-	flash_cen: out std_logic;
-	--flash_sck: out std_logic; -- accessed via special ECP5 primitive
-	flash_holdn, flash_wpn: out std_logic := '1';
-
-	-- SD card (SPI #1)
-	sd_cmd: inout std_logic;
-	sd_clk: out std_logic;
-	sd_d: inout std_logic_vector(3 downto 0);
-	sd_cdn: in std_logic;
-	sd_wp: in std_logic;
-
-	-- ADC MAX11123 (SPI #2)
-	adc_csn: out std_logic;
-	adc_sclk: out std_logic;
-	adc_mosi: out std_logic;
-	adc_miso: in std_logic;
-
-	-- PCB antenna
-	ant: out std_logic;
-
-	-- '1' = power off
-	shutdown: out std_logic := '0'
+	ftdi_txden: out std_logic
     );
 end glue;
 
 architecture x of glue is
     signal clk, pll_lock: std_logic;
+    signal pll_clk: std_logic_vector(3 downto 0);
     signal reset: std_logic;
     signal sio_break: std_logic;
-    signal flash_sck: std_logic;
-    signal flash_csn: std_logic;
 
     signal R_simple_in: std_logic_vector(19 downto 0);
     signal open_out: std_logic_vector(31 downto 8);
 
 begin
+    clk <= pll_clk(0);
     -- generic BRAM glue
     glue_bram: entity work.glue_bram
     generic map (
@@ -110,7 +79,7 @@ begin
 	C_big_endian => C_big_endian,
 	C_mult_enable => C_mult_enable,
 	C_mul_reg => C_mul_reg,
-	C_clk_freq => C_clk_freq_hz / 1000000,
+	C_clk_freq => C_clk_freq,
 	C_bram_size => C_bram_size,
 	C_debug => C_debug,
 	C_sio => C_sio,
@@ -120,47 +89,29 @@ begin
     )
     port map (
 	clk => clk,
-	sio_txd(0) => rs232_tx,
-	sio_rxd(0) => rs232_rx,
+	sio_txd(0) => ftdi_rxd,
+	sio_rxd(0) => ftdi_txd,
 	sio_break(0) => sio_break,
 	simple_out(31 downto 8) => open_out,
 	simple_out(7 downto 0) => led,
 	simple_in(31 downto 20) => (others => '-'),
 	simple_in(19 downto 0) => R_simple_in,
-	spi_ss(0) => flash_csn,
-	spi_ss(1) => sd_d(3),
-	spi_ss(2) => adc_csn,
-	spi_sck(0) => flash_sck,
-	spi_sck(1) => sd_clk,
-	spi_sck(2) => adc_sclk,
-	spi_mosi(0) => flash_si,
-	spi_mosi(1) => sd_cmd,
-	spi_mosi(2) => adc_mosi,
-	spi_miso(0) => flash_so,
-	spi_miso(1) => sd_d(0),
-	spi_miso(2) => adc_miso
+	spi_miso => (others => '0')
     );
-    R_simple_in <= sw & x"00" & '0' & not btn_pwr & btn_f2 & btn_f1
-      & btn_up & btn_down & btn_left & btn_right when rising_edge(clk);
-
-    -- SPI flash clock has to be routed through a ECP5-specific primitive
-    I_flash_mux: USRMCLK
-    port map (
-	USRMCLKTS => flash_csn,
-	USRMCLKI => flash_sck
-    );
-    flash_cen <= flash_csn;
+    R_simple_in <= sw & x"00" & '0' & not btn(0) & btn(2) & btn(1)
+      & btn(3) & btn(4) & btn(5) & btn(6) when rising_edge(clk);
 
     I_pll: entity work.ecp5pll
     generic map (
 	in_hz => 25000000,
-	out0_hz => C_clk_freq_hz
+	out0_hz => C_clk_freq * 1000000
     )
     port map (
-	clk_i => clk_25m,
-	clk_o(0) => clk,
+	clk_i => clk_25mhz,
+	clk_o => pll_clk,
 	locked => pll_lock
     );
 
     reset <= not pll_lock or sio_break;
+
 end x;

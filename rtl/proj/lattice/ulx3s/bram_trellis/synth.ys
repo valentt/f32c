@@ -1,4 +1,4 @@
-ghdl --ieee=synopsys -fexplicit -frelaxed-rules --work=work \
+ghdl --ieee=synopsys -fexplicit -frelaxed-rules --latches --work=work \
   ../../../../cpu/defs_mi32.vhd \
   ../../../../cpu/defs_rv32.vhd \
   ../../../../cpu/defs_f32c.vhd \
@@ -22,7 +22,7 @@ ghdl --ieee=synopsys -fexplicit -frelaxed-rules --work=work \
   ../../../../soc/rtc.vhd \
   ../../../../soc/timer.vhd \
   ../../../../generic/glue_bram.vhd \
-  ../../../../lattice/ulx3s/clocks/ecp5pll_25_169_112_96_84.vhd \
+  ../../../../lattice/chip/ecp5u/ecp5pll.vhd \
   ../../../../lattice/ulx3s/top/top_bram.vhd \
   -e glue
 
@@ -33,4 +33,5 @@ synth_ecp5 -top glue -nowidelut -run :check
 stat
 check -noinit
 
+blackbox =A:whitebox
 write_json f32c.json
