@@ -1,0 +1,123 @@
+name: Build f32c FPGA Bitstream
+
+on:
+  push:
+    branches: [ master, main ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+env:
+  DEVICE: 85k
+  PACKAGE: CABGA381
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build GHDL patched image
+      run: |
+        cat > Dockerfile.ghdl-patched << 'EOF'
+        FROM hdlc/ghdl:yosys
+
+        RUN apt-get update && apt-get install -y \
+            git make gnat gcc g++ zlib1g-dev \
+            && rm -rf /var/lib/apt/lists/*
+
+        WORKDIR /build
+        RUN git clone https://github.com/ghdl/ghdl.git && \
+            cd ghdl && git checkout a00b7833f
+
+        RUN cd ghdl/src/vhdl && \
+            sed -i 's/if Choice_Staticness \/= Locally$/if Choice_Staticness \/= Locally\n                    and then not Flag_Relaxed_Rules/' vhdl-sem_expr.adb
+
+        WORKDIR /build/ghdl
+        RUN ./configure --prefix=/usr/local && make -j$(nproc) && make install
+
+        ENV PATH="/usr/local/bin:${PATH}"
+        WORKDIR /workspace
+        EOF
+
+        docker build -f Dockerfile.ghdl-patched -t ghdl-yosys-patched .
+
+    - name: Run Synthesis (GHDL + Yosys)
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/src \
+          -w /src/rtl/proj/lattice/ulx3s/xram_sdram_12f_v2.0_c2_noscripts_trellis \
+          ghdl-yosys-patched \
+          yosys -m ghdl synth.ys
+
+        ls -la rtl/proj/lattice/ulx3s/xram_sdram_12f_v2.0_c2_noscripts_trellis/
+
+    - name: Run Place & Route (nextpnr-ecp5)
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/src \
+          -w /src/rtl/proj/lattice/ulx3s/xram_sdram_12f_v2.0_c2_noscripts_trellis \
+          hdlc/nextpnr:ecp5 \
+          nextpnr-ecp5 \
+            --${{ env.DEVICE }} \
+            --package ${{ env.PACKAGE }} \
+            --json f32c_xram.json \
+            --lpf /src/rtl/proj/lattice/constraints/ulx3s_v20.lpf \
+            --textcfg f32c_xram_${{ env.DEVICE }}.config \
+            --placer sa
+
+    - name: Generate Bitstream (ecppack)
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/src \
+          -w /src/rtl/proj/lattice/ulx3s/xram_sdram_12f_v2.0_c2_noscripts_trellis \
+          hdlc/nextpnr:ecp5 \
+          ecppack f32c_xram_${{ env.DEVICE }}.config f32c_xram_${{ env.DEVICE }}.bit
+
+        ls -la rtl/proj/lattice/ulx3s/xram_sdram_12f_v2.0_c2_noscripts_trellis/*.bit
+
+    - name: Upload bitstream artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: f32c-bitstream-${{ env.DEVICE }}
+        path: rtl/proj/lattice/ulx3s/xram_sdram_12f_v2.0_c2_noscripts_trellis/f32c_xram_${{ env.DEVICE }}.bit
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          rtl/proj/lattice/ulx3s/xram_sdram_12f_v2.0_c2_noscripts_trellis/f32c_xram_${{ env.DEVICE }}.bit
+        body: |
+          ## f32c XRAM SDRAM Bitstream for ULX3S
+
+          **Target Device:** LFE5U-${{ env.DEVICE }}
+          **Board:** ULX3S v2.0
+
+          ### Features
+          - MIPS32 or RISC-V CPU
+          - SDRAM controller (32MB)
+          - UART (115200 baud)
+          - SPI Flash boot
+          - SD card support
+
+          ### Programming
+          ```bash
+          fujprog f32c_xram_${{ env.DEVICE }}.bit
+          ```
+
+          ### Built with
+          - GHDL 5.0.0-dev (patched)
+          - Yosys 0.36
+          - nextpnr-ecp5 (SA placer)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
