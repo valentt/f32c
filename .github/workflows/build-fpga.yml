@@ -1,15 +1,24 @@
 name: Build f32c FPGA Bitstream
 
 on:
-  push:
-    branches: [ master, main ]
-    tags: [ 'v*' ]
-  pull_request:
-    branches: [ master, main ]
+  # Manual trigger only (via Actions tab or gh workflow run)
   workflow_dispatch:
+    inputs:
+      device:
+        description: 'ECP5 Device (12k, 45k, 85k)'
+        required: true
+        default: '85k'
+        type: choice
+        options:
+          - '12k'
+          - '45k'
+          - '85k'
+  # Also run on release tags
+  push:
+    tags: [ 'v*' ]
 
 env:
-  DEVICE: 85k
+  DEVICE: ${{ github.event.inputs.device || '85k' }}
   PACKAGE: CABGA381
 
 jobs:
