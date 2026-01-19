@@ -16,7 +16,6 @@ on:
 
 env:
   DEVICE: ${{ github.event.inputs.device || '12k' }}
-  PACKAGE: CABGA381
   PROJECT_DIR: rtl/proj/lattice/ulx3s/sdram_min_trellis_v2
 
 jobs:
@@ -25,16 +24,8 @@ jobs:
     timeout-minutes: 60
 
     steps:
-    - name: Checkout f32c-valent
+    - name: Checkout repository
       uses: actions/checkout@v4
-      with:
-        path: f32c-valent
-
-    - name: Checkout upstream f32c
-      uses: actions/checkout@v4
-      with:
-        repository: f32c/f32c
-        path: f32c
 
     - name: Install oss-cad-suite
       run: |
@@ -42,80 +33,13 @@ jobs:
         tar xzf oss-cad-suite-linux-x64-20240214.tgz
         echo "$PWD/oss-cad-suite/bin" >> $GITHUB_PATH
 
-    - name: Patch GHDL for relaxed array choices
+    - name: Build with Make
+      working-directory: ${{ env.PROJECT_DIR }}
       run: |
-        cd oss-cad-suite
-        # The oss-cad-suite GHDL should work with --relaxed-rules flag
-        ghdl --version
-
-    - name: Run Synthesis (GHDL + Yosys)
-      working-directory: f32c-valent/${{ env.PROJECT_DIR }}
-      run: |
-        # Create synth script with correct paths
-        cat > synth_ci.ys << 'EOF'
-        ghdl --ieee=synopsys -fexplicit -frelaxed-rules --latches --work=work \
-          $F32C/rtl/cpu/defs_mi32.vhd \
-          $F32C/rtl/cpu/defs_rv32.vhd \
-          $F32C/rtl/cpu/defs_f32c.vhd \
-          $F32C/rtl/cpu/idecode_mi32.vhd \
-          $F32C/rtl/cpu/idecode_rv32.vhd \
-          $F32C/rtl/cpu/debug.vhd \
-          $F32C/rtl/cpu/alu.vhd \
-          $F32C/rtl/cpu/shift.vhd \
-          $F32C/rtl/cpu/loadalign.vhd \
-          $F32C/rtl/cpu/mul_dsp.vhd \
-          $F32C/rtl/generic/bptrace.vhd \
-          $F32C/rtl/generic/reg1w2r.vhd \
-          $F32C/rtl/cpu/pipeline.vhd \
-          $F32C_VALENT/rtl/cpu/cache_ghdl.vhd \
-          $F32C/rtl/generic/bram_true2p_1clk.vhd \
-          $F32C/rtl/generic/bootloader/defs_bootblock.vhd \
-          $F32C/rtl/generic/bootloader/boot_sio_rv32el.vhd \
-          $F32C/rtl/generic/bootloader/boot_sio_mi32el.vhd \
-          $F32C/rtl/generic/bootloader/boot_sio_mi32eb.vhd \
-          $F32C/rtl/generic/bootloader/boot_rom_mi32el.vhd \
-          ./sdram_controller_ghdl.vhd \
-          $F32C/rtl/soc/sio.vhd \
-          $F32C/rtl/soc/spi.vhd \
-          $F32C/rtl/soc/rtc.vhd \
-          $F32C/rtl/generic/rom.vhd \
-          ./glue_sdram_min_ghdl.vhd \
-          $F32C/rtl/lattice/chip/ecp5u/ecp5pll.vhd \
-          $F32C/rtl/lattice/chip/ecp5u/ecp5_flash_clk.vhd \
-          ./top_sdram_min.vhd \
-          -e top_sdram
-        synth_ecp5 -top top_sdram -json sdram_min.json
-        EOF
-
-        # Replace variables with actual paths
-        F32C="${GITHUB_WORKSPACE}/f32c"
-        F32C_VALENT="${GITHUB_WORKSPACE}/f32c-valent"
-        sed -i "s|\$F32C_VALENT|${F32C_VALENT}|g" synth_ci.ys
-        sed -i "s|\$F32C|${F32C}|g" synth_ci.ys
-
-        cat synth_ci.ys
-        yosys -m ghdl synth_ci.ys
-
-    - name: Run Place & Route (nextpnr-ecp5)
-      working-directory: f32c-valent/${{ env.PROJECT_DIR }}
-      run: |
-        nextpnr-ecp5 \
-          --${{ env.DEVICE }} \
-          --package ${{ env.PACKAGE }} \
-          --speed 6 \
-          --json sdram_min.json \
-          --lpf ulx3s_nextpnr.lpf \
-          --lpf-allow-unconstrained \
-          --textcfg sdram_min.config
-
-    - name: Generate Bitstream (ecppack)
-      working-directory: f32c-valent/${{ env.PROJECT_DIR }}
-      run: |
-        ecppack --compress --input sdram_min.config --bit sdram_min.bit
-        ls -la sdram_min.*
+        make FPGA_SIZE=${{ env.DEVICE }}
 
     - name: Upload bitstream artifact
       uses: actions/upload-artifact@v4
       with:
         name: sdram_min-${{ env.DEVICE }}
-        path: f32c-valent/${{ env.PROJECT_DIR }}/sdram_min.bit
+        path: ${{ env.PROJECT_DIR }}/sdram_min.bit

@@ -5,34 +5,34 @@
 # Expected result: ~3500 LUT4, ~1500 FF (matching Diamond)
 
 ghdl --ieee=synopsys -fexplicit -frelaxed-rules --latches --work=work \
-  /projects/f32c/rtl/cpu/defs_mi32.vhd \
-  /projects/f32c/rtl/cpu/defs_rv32.vhd \
-  /projects/f32c/rtl/cpu/defs_f32c.vhd \
-  /projects/f32c/rtl/cpu/idecode_mi32.vhd \
-  /projects/f32c/rtl/cpu/idecode_rv32.vhd \
-  /projects/f32c/rtl/cpu/debug.vhd \
-  /projects/f32c/rtl/cpu/alu.vhd \
-  /projects/f32c/rtl/cpu/shift.vhd \
-  /projects/f32c/rtl/cpu/loadalign.vhd \
-  /projects/f32c/rtl/cpu/mul_dsp.vhd \
-  /projects/f32c/rtl/generic/bptrace.vhd \
-  /projects/f32c/rtl/generic/reg1w2r.vhd \
-  /projects/f32c/rtl/cpu/pipeline.vhd \
-  /projects/f32c-valent/rtl/cpu/cache_ghdl.vhd \
-  /projects/f32c/rtl/generic/bram_true2p_1clk.vhd \
-  /projects/f32c/rtl/generic/bootloader/defs_bootblock.vhd \
-  /projects/f32c/rtl/generic/bootloader/boot_sio_rv32el.vhd \
-  /projects/f32c/rtl/generic/bootloader/boot_sio_mi32el.vhd \
-  /projects/f32c/rtl/generic/bootloader/boot_sio_mi32eb.vhd \
-  /projects/f32c/rtl/generic/bootloader/boot_rom_mi32el.vhd \
+  ../../../../cpu/defs_mi32.vhd \
+  ../../../../cpu/defs_rv32.vhd \
+  ../../../../cpu/defs_f32c.vhd \
+  ../../../../cpu/idecode_mi32.vhd \
+  ../../../../cpu/idecode_rv32.vhd \
+  ../../../../cpu/debug.vhd \
+  ../../../../cpu/alu.vhd \
+  ../../../../cpu/shift.vhd \
+  ../../../../cpu/loadalign.vhd \
+  ../../../../cpu/mul_dsp.vhd \
+  ../../../../generic/bptrace.vhd \
+  ../../../../generic/reg1w2r.vhd \
+  ../../../../cpu/pipeline.vhd \
+  ../../../../cpu/cache_ghdl.vhd \
+  ../../../../generic/bram_true2p_1clk.vhd \
+  ../../../../generic/bootloader/defs_bootblock.vhd \
+  ../../../../generic/bootloader/boot_sio_rv32el.vhd \
+  ../../../../generic/bootloader/boot_sio_mi32el.vhd \
+  ../../../../generic/bootloader/boot_sio_mi32eb.vhd \
+  ../../../../generic/bootloader/boot_rom_mi32el.vhd \
   ./sdram_controller_ghdl.vhd \
-  /projects/f32c/rtl/soc/sio.vhd \
-  /projects/f32c/rtl/soc/spi.vhd \
-  /projects/f32c/rtl/soc/rtc.vhd \
-  /projects/f32c/rtl/generic/rom.vhd \
+  ../../../../soc/sio.vhd \
+  ../../../../soc/spi.vhd \
+  ../../../../soc/rtc.vhd \
+  ../../../../generic/rom.vhd \
   ./glue_sdram_min_ghdl.vhd \
-  /projects/f32c/rtl/lattice/chip/ecp5u/ecp5pll.vhd \
-  /projects/f32c/rtl/lattice/chip/ecp5u/ecp5_flash_clk.vhd \
+  ../../../../lattice/chip/ecp5u/ecp5pll.vhd \
+  ../../../../lattice/chip/ecp5u/ecp5_flash_clk.vhd \
   ./top_sdram_min.vhd \
   -e top_sdram
 
