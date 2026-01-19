@@ -550,8 +550,9 @@ begin
 	  conv_integer(io_addr(5 downto 4)) = i else '0';
     end generate;
     G_sio_decoder: if C_sio > 0 generate
-    with conv_integer(io_addr(11 downto 4)) select sio_io_range <= true
-      when F_io_from(C_io_sio) to F_io_to(C_io_sio), false when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    sio_io_range <= true when (conv_integer(io_addr(11 downto 4)) >= F_io_from(C_io_sio) and
+                               conv_integer(io_addr(11 downto 4)) <= F_io_to(C_io_sio)) else false;
     end generate;
     sio_rx(0) <= sio_rxd(0);
 
@@ -568,8 +569,9 @@ begin
 	spi_mosi(i) <= '0';
 	spi_ce(i) <= '0';
     end generate;
-    with conv_integer(io_addr(11 downto 4)) select spi_io_range <= true
-      when F_io_from(C_io_spi) to F_io_to(C_io_spi), false when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    spi_io_range <= true when (conv_integer(io_addr(11 downto 4)) >= F_io_from(C_io_spi) and
+                               conv_integer(io_addr(11 downto 4)) <= F_io_to(C_io_spi)) else false;
     end generate;
     G_no_spi: if C_spi = 0 generate
     spi_io_range <= false;
@@ -590,46 +592,50 @@ begin
 	bus_in => cpu_to_io, bus_out => from_rtc
     );
     rtc_ce <= io_addr_strobe(R_cur_io_port) when rtc_io_range else '0';
-    with conv_integer(io_addr(11 downto 4)) select rtc_io_range <= true
-      when F_io_from(C_io_rtc) to F_io_to(C_io_rtc), false when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    rtc_io_range <= true when (conv_integer(io_addr(11 downto 4)) >= F_io_from(C_io_rtc) and
+                               conv_integer(io_addr(11 downto 4)) <= F_io_to(C_io_rtc)) else false;
     end generate;
 
     -- Address decoder when CPU reads IO
+    -- GHDL fix: use if-elsif instead of case with function range (not locally static)
     process(io_addr, from_sio, from_spi, from_rtc, R_simple_in, R_simple_out)
+	variable v_addr : integer;
     begin
 	io_to_cpu <= (others => '0');
-	case conv_integer(io_addr(11 downto 4)) is
-	when F_io_from(C_io_sio) to F_io_to(C_io_sio) =>
+	v_addr := conv_integer(io_addr(11 downto 4));
+
+	if v_addr >= F_io_from(C_io_sio) and v_addr <= F_io_to(C_io_sio) then
 	    for i in 0 to C_sio - 1 loop
 		if conv_integer(io_addr(5 downto 4)) = i then
 		    io_to_cpu <= from_sio(i);
 		end if;
 	    end loop;
-	when F_io_from(C_io_spi) to F_io_to(C_io_spi) =>
+	elsif v_addr >= F_io_from(C_io_spi) and v_addr <= F_io_to(C_io_spi) then
 	    for i in 0 to C_spi - 1 loop
 		if conv_integer(io_addr(5 downto 4)) = i then
 		    io_to_cpu <= from_spi(i);
 		end if;
 	    end loop;
-	when F_io_from(C_io_simple_in) to F_io_to(C_io_simple_in) =>
+	elsif v_addr >= F_io_from(C_io_simple_in) and v_addr <= F_io_to(C_io_simple_in) then
 	    for i in 0 to (C_simple_in + 31) / 4 - 1 loop
 		if conv_integer(io_addr(3 downto 2)) = i then
 		    io_to_cpu(C_simple_in - i * 32 - 1 downto i * 32) <=
 		      R_simple_in(C_simple_in - i * 32 - 1 downto i * 32);
 		end if;
 	    end loop;
-	when F_io_from(C_io_simple_out) to F_io_to(C_io_simple_out) =>
+	elsif v_addr >= F_io_from(C_io_simple_out) and v_addr <= F_io_to(C_io_simple_out) then
 	    for i in 0 to (C_simple_out + 31) / 4 - 1 loop
 		if conv_integer(io_addr(3 downto 2)) = i then
 		    io_to_cpu(C_simple_out - i * 32 - 1 downto i * 32) <=
 		      R_simple_out(C_simple_out - i * 32 - 1 downto i * 32);
 		end if;
 	    end loop;
-	when F_io_from(C_io_rtc) to F_io_to(C_io_rtc) =>
+	elsif v_addr >= F_io_from(C_io_rtc) and v_addr <= F_io_to(C_io_rtc) then
 	    io_to_cpu <= from_rtc;
-	when others  =>
+	else
 	    io_to_cpu <= (others => '0');
-	end case;
+	end if;
     end process;
 
     --
