@@ -1,5 +1,5 @@
 --
--- Copyright (c) 2015-2023 Marko Zec
+-- Copyright (c) 2015-2022 Marko Zec
 --
 -- Redistribution and use in source and binary forms, with or without
 -- modification, are permitted provided that the following conditions
@@ -22,6 +22,11 @@
 -- OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 -- SUCH DAMAGE.
 --
+-- Modifications:
+-- Hans Weber (2026): GHDL compatibility V5
+--   - Uses sdram_controller_ghdl with separate ports (no record)
+--   - Avoids Yosys flatten "driving constant bits" error
+--
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -29,7 +34,6 @@ use ieee.std_logic_arith.all;
 use ieee.std_logic_unsigned.all;
 
 use work.f32c_pack.all;
-use work.sdram_pack.all;
 
 
 entity glue_sdram_min is
@@ -70,10 +74,14 @@ entity glue_sdram_min is
 	C_debug: boolean := false;
 
 	-- SDRAM parameters
-	C_sdram_address_width: integer := 24;
-	C_sdram_column_bits: integer := 9;
-	C_sdram_startup_cycles: integer := 10100;
-	C_sdram_cycles_per_refresh: integer := 1524;
+	C_ras: natural := 2;
+	C_cas: natural := 2;
+	C_pre: natural := 2;
+	C_clock_range: integer range 0 to 2 := 1;
+	C_sdram_address_width : integer := 24;
+	C_sdram_column_bits : integer := 9;
+	C_sdram_startup_cycles : integer := 10100;
+	C_sdram_cycles_per_refresh : integer := 1524;
 
 	-- SoC configuration options
 	C_cpus: integer := 1;
@@ -83,6 +91,7 @@ entity glue_sdram_min is
 	C_sio_fixed_baudrate: boolean := false;
 	C_sio_break_detect: boolean := true;
 	C_spi: integer := 0;
+	C_spi_turbo_mode: std_logic_vector := "0000";
 	C_spi_fixed_speed: std_logic_vector := "1111";
 	C_simple_in: natural := 32;
 	C_simple_out: natural := 32;
@@ -96,10 +105,10 @@ entity glue_sdram_min is
 	xbus_write: out std_logic;
 	xbus_byte_sel: out std_logic_vector(3 downto 0);
 	xbus_data_out: out std_logic_vector(31 downto 0);
-	xbus_data_in: in std_logic_vector(31 downto 0) := (others => '-');
+	xbus_data_in: in std_logic_vector(31 downto 0) := (others => '0');
 	xbus_ack: in std_logic := '1';
 	sdram_addr: out std_logic_vector(12 downto 0);
-	sdram_data: inout std_logic_vector(15 downto 0);
+	sdram_data: inOut std_logic_vector(15 downto 0);
 	sdram_ba: out std_logic_vector(1 downto 0);
 	sdram_dqm: out std_logic_vector(1 downto 0);
 	sdram_ras, sdram_cas: out std_logic;
@@ -107,8 +116,8 @@ entity glue_sdram_min is
 	sdram_we, sdram_cs: out std_logic;
 	sio_rxd: in std_logic_vector(C_sio - 1 downto 0) := (others => '1');
 	sio_txd, sio_break: out std_logic_vector(C_sio - 1 downto 0);
-	spi_sck, spi_ss: out std_logic_vector(C_spi - 1 downto 0);
-	spi_mosi, spi_miso: inout std_logic_vector(C_spi - 1 downto 0);
+	spi_sck, spi_ss, spi_mosi: out std_logic_vector(C_spi - 1 downto 0);
+	spi_miso: in std_logic_vector(C_spi - 1 downto 0) := (others => '0');
 	simple_in: in std_logic_vector(C_simple_in - 1 downto 0) :=
 	  (others => '0');
 	simple_out: out std_logic_vector(C_simple_out - 1 downto 0)
@@ -146,13 +155,29 @@ architecture Behavioral of glue_sdram_min is
     signal rom_i_to_cpu: std_logic_vector(31 downto 0);
     signal rom_i_ready: std_logic;
 
-    -- SDRAM
-    constant C_ras: natural range 2 to 3 := 2 + C_clk_freq / 137;
-    constant C_cas: natural range 2 to 3 := 2 + C_clk_freq / 137;
-    constant C_pre: natural range 2 to 3 := 2 + C_clk_freq / 137;
-    constant C_clock_range: natural range 0 to 2 := 1 + C_clk_freq / 101;
-    signal sdram_req: sdram_req_array;
-    signal sdram_resp: sdram_resp_array;
+    -- SDRAM - separate signals instead of record (GHDL fix)
+    -- Port 0 (data) to SDRAM
+    signal sdram_port0_addr: std_logic_vector(31 downto 2);
+    signal sdram_port0_data_in: std_logic_vector(31 downto 0);
+    signal sdram_port0_byte_sel: std_logic_vector(3 downto 0);
+    signal sdram_port0_addr_strobe: std_logic;
+    signal sdram_port0_burst_len: std_logic_vector(2 downto 0);
+    signal sdram_port0_write: std_logic;
+    -- Port 0 from SDRAM
+    signal sdram_port0_data_out: std_logic_vector(31 downto 0);
+    signal sdram_port0_data_ready: std_logic;
+
+    -- Port 1 (instruction) to SDRAM
+    signal sdram_port1_addr: std_logic_vector(31 downto 2);
+    signal sdram_port1_data_in: std_logic_vector(31 downto 0);
+    signal sdram_port1_byte_sel: std_logic_vector(3 downto 0);
+    signal sdram_port1_addr_strobe: std_logic;
+    signal sdram_port1_burst_len: std_logic_vector(2 downto 0);
+    signal sdram_port1_write: std_logic;
+    -- Port 1 from SDRAM
+    signal sdram_port1_data_out: std_logic_vector(31 downto 0);
+    signal sdram_port1_data_ready: std_logic;
+
     signal snoop_cycle: std_logic;
     signal snoop_addr: std_logic_vector(31 downto 2);
 
@@ -177,47 +202,51 @@ architecture Behavioral of glue_sdram_min is
 	end if;
     end F_init_PC;
 
-    -- CPU reset control: 0x7C0
-    constant C_io_cpu_reset: std_logic_vector(7 downto 0) := x"7C";
+    -- IO base
+    type T_io_range is array(0 to 1) of std_logic_vector(15 downto 0);
+    constant C_io_base: std_logic_vector(15 downto 0) := x"F800";
+
+    function F_io_from(r: T_io_range) return integer is
+	variable a: std_logic_vector(15 downto 0);
+    begin
+	a := r(0);
+	return conv_integer(a(11 downto 4) - C_io_base(11 downto 4));
+    end F_io_from;
+
+    function F_io_to(r: T_io_range) return integer is
+	variable a: std_logic_vector(15 downto 0);
+    begin
+	a := r(1);
+	return conv_integer(a(11 downto 4) - C_io_base(11 downto 4));
+    end F_io_to;
+
+    -- CPU reset control
+    constant C_io_cpu_reset: T_io_range := (x"FFC0", x"FFC0");
     signal R_cpu_reset: std_logic_vector(15 downto 0) := (others => '1');
 
-    -- Simple input (buttons and switches): 0x700 .. 070F
-    constant C_io_simple_in: std_logic_vector(7 downto 0) := x"70";
-    signal R_simple_in: std_logic_vector(31 downto 0);
+    -- Simple I/O: onboard LEDs, buttons and switches
+    constant C_io_simple_in: T_io_range := (x"FF00", x"FF0F");
+    constant C_io_simple_out: T_io_range := (x"FF10", x"FF1F");
+    signal R_simple_in, R_simple_out: std_logic_vector(31 downto 0);
 
-    -- Simple output (onboard LEDs): 0x710 .. 0x71F
-    constant C_io_simple_out: std_logic_vector(7 downto 0) := x"71";
-    signal R_simple_out: std_logic_vector(31 downto 0);
-
-    -- Serial I/O (RS232): 0x300 .. 0x33F
-    constant C_io_sio0: std_logic_vector(7 downto 0) := x"30";
-    constant C_io_sio1: std_logic_vector(7 downto 0) := x"31";
-    constant C_io_sio2: std_logic_vector(7 downto 0) := x"32";
-    constant C_io_sio3: std_logic_vector(7 downto 0) := x"33";
+    -- Serial I/O (RS232)
+    constant C_io_sio: T_io_range := (x"FB00", x"FB3F");
     signal sio_io_range: boolean;
     type from_sio_type is array (0 to C_sio - 1) of
       std_logic_vector(31 downto 0);
     signal from_sio: from_sio_type;
-    signal sio_ce, sio_intr: std_logic_vector(C_sio - 1 downto 0);
-    signal sio_tx, sio_rx: std_logic_vector(C_sio - 1 downto 0);
+    signal sio_ce, sio_tx, sio_rx: std_logic_vector(C_sio - 1 downto 0);
 
-    -- SPI (on-board Flash, SD card, others...): 0x340 .. 0x37F
-    constant C_io_spi0: std_logic_vector(7 downto 0) := x"34";
-    constant C_io_spi1: std_logic_vector(7 downto 0) := x"35";
-    constant C_io_spi2: std_logic_vector(7 downto 0) := x"36";
-    constant C_io_spi3: std_logic_vector(7 downto 0) := x"37";
+    -- SPI (on-board Flash, SD card, others...)
+    constant C_io_spi: T_io_range := (x"FB40", x"FB7F");
     signal spi_io_range: boolean;
     type from_spi_type is array (0 to C_spi - 1) of
       std_logic_vector(31 downto 0);
     signal from_spi: from_spi_type;
     signal spi_ce: std_logic_vector(C_spi - 1 downto 0);
-    -- GHDL compatibility: dummy signal for unused spi_cen bits
-    type spi_cen_unused_type is array (0 to C_spi - 1) of
-      std_logic_vector(3 downto 1);
-    signal spi_cen_unused: spi_cen_unused_type;
 
-    -- RTC: 0x780 .. 0x78F
-    constant C_io_rtc: std_logic_vector(7 downto 0) := x"78";
+    -- RTC
+    constant C_io_rtc: T_io_range := (x"FF80", x"FF8F");
     signal rtc_io_range: boolean;
     signal rtc_ce: std_logic;
     signal from_rtc: std_logic_vector(31 downto 0);
@@ -227,9 +256,10 @@ architecture Behavioral of glue_sdram_min is
     signal debug_to_sio_data: std_logic_vector(7 downto 0);
     signal deb_sio_rx_done, deb_sio_tx_busy, deb_sio_tx_strobe: std_logic;
     signal deb_tx: std_logic;
+    signal debug_debug: std_logic_vector(7 downto 0);
     signal debug_out_strobe: std_logic;
     signal debug_active: std_logic;
-    signal debug_bus_out: std_logic_vector(31 downto 0);
+    signal debug_bus_out: std_logic_vector(31 downto 0); -- GHDL fix for partial open
 
 begin
 
@@ -238,11 +268,11 @@ begin
     --
     G_CPU: for i in 0 to (C_cpus - 1) generate
     begin
-    intr(i) <= "000" & '0' & sio_intr(0) & '0' when i = 0 else "000000";
+    intr(i) <= "000" & '0' & from_sio(0)(8) & '0' when i = 0 else "000000";
     res(i) <= R_cpu_reset(i);
-    cpu: entity work.f32c_cache
+    cpu: entity work.cache
     generic map (
-	C_arch => C_arch, C_cpuid => i,
+	C_arch => C_arch, C_cpuid => i, C_clk_freq => C_clk_freq,
 	C_big_endian => C_big_endian, C_branch_likely => C_branch_likely,
 	C_sign_extend => C_sign_extend, C_movn_movz => C_movn_movz,
 	C_mult_enable => C_mult_enable, C_PC_mask => C_PC_mask,
@@ -279,6 +309,7 @@ begin
 	debug_out_data => debug_to_sio_data,
 	debug_out_strobe => deb_sio_tx_strobe,
 	debug_out_busy => deb_sio_tx_busy,
+	debug_debug => debug_debug,
 	debug_active => debug_active
     );
     end generate;
@@ -290,7 +321,7 @@ begin
     generic map (
 	C_arch => C_arch,
 	C_big_endian => C_big_endian,
-	C_boot_spi => true
+	C_boot_spi => false
     )
     port map (
 	clk => clk, strobe => imem_addr_strobe(0), addr => imem_addr(0),
@@ -298,113 +329,103 @@ begin
     );
 
     --
-    -- SDRAM
+    -- SDRAM interface - directly assign signals (no record)
     --
     process(imem_addr, dmem_addr, dmem_byte_sel, cpu_to_dmem, dmem_write,
-      dmem_addr_strobe, imem_addr_strobe, rom_i_ready,rom_i_to_cpu,
-      sdram_req, sdram_resp, io_to_cpu, io_addr_strobe, io_write,
-      R_cur_io_port, xbus_addr_range, xbus_data_in, xbus_ack,
-      dmem_burst_len, imem_burst_len)
-	variable data_port, instr_port: integer;
+      dmem_addr_strobe, imem_addr_strobe,
+      sdram_port0_data_out, sdram_port0_data_ready,
+      sdram_port1_data_out, sdram_port1_data_ready,
+      io_to_cpu, io_addr_strobe, R_cur_io_port, xbus_addr_range, xbus_ack, xbus_data_in,
+      rom_i_ready, rom_i_to_cpu)
 	variable sdram_data_strobe, sdram_instr_strobe: std_logic;
     begin
-    for cpu in 0 to (C_cpus - 1) loop
-	data_port := cpu;
-	instr_port := C_cpus + cpu;
+	-- For single CPU (C_cpus = 1), CPU 0 uses port 0 (data) and port 1 (instr)
 	sdram_data_strobe := '0';
 	sdram_instr_strobe := '0';
 
-	if dmem_addr(cpu)(31 downto 28) = x"8" then
-	    sdram_data_strobe := dmem_addr_strobe(cpu);
+	if dmem_addr(0)(31 downto 28) = x"8" then
+	    sdram_data_strobe := dmem_addr_strobe(0);
 	end if;
-	if imem_addr(cpu)(31 downto 28) = x"8" then
-	    sdram_instr_strobe := imem_addr_strobe(cpu);
+	if imem_addr(0)(31 downto 28) = x"8" then
+	    sdram_instr_strobe := imem_addr_strobe(0);
 	end if;
-	if cpu = 0 then
-	    -- CPU, data bus
-	    if io_addr_strobe(cpu) = '1' then
-		if R_cur_io_port = cpu then
-		    dmem_data_ready(cpu) <= '1';
-		else
-		    dmem_data_ready(cpu) <= '0';
-		end if;
-		final_to_cpu_d(cpu) <= io_to_cpu;
-	    elsif sdram_data_strobe = '1' then
-		dmem_data_ready(cpu) <= sdram_resp(data_port).data_ready;
-		final_to_cpu_d(cpu) <= sdram_resp(data_port).data_out;
-	    elsif xbus_addr_range then
-		dmem_data_ready(cpu) <= xbus_ack;
-		final_to_cpu_d(cpu) <= xbus_data_in;
-	    else -- ROM, instruction bus only
-		dmem_data_ready(cpu) <= '1';
-		final_to_cpu_d(cpu) <= (others => '-');
-	    end if;
-	    -- CPU, instruction bus
-	    if sdram_instr_strobe = '1' then
-		imem_data_ready(cpu) <= sdram_resp(instr_port).data_ready;
-		final_to_cpu_i(cpu) <= sdram_resp(instr_port).data_out;
+
+	-- CPU 0, data bus
+	if io_addr_strobe(0) = '1' then
+	    if R_cur_io_port = 0 then
+		dmem_data_ready(0) <= '1';
 	    else
-		imem_data_ready(cpu) <= rom_i_ready;
-		final_to_cpu_i(cpu) <= rom_i_to_cpu;
+		dmem_data_ready(0) <= '0';
 	    end if;
-	else -- CPU #1, CPU #2...
-	    -- CPU, data bus
-	    if io_addr_strobe(cpu) = '1' then
-		if R_cur_io_port = cpu then
-		    dmem_data_ready(cpu) <= '1';
-		else
-		    dmem_data_ready(cpu) <= '0';
-		end if;
-		final_to_cpu_d(cpu) <= io_to_cpu;
-	    elsif sdram_data_strobe = '1' then
-		dmem_data_ready(cpu) <= sdram_resp(data_port).data_ready;
-		final_to_cpu_d(cpu) <= sdram_resp(data_port).data_out;
-	    else
-		-- XXX assert address eror signal?
-		dmem_data_ready(cpu) <= '1';
-		final_to_cpu_d(cpu) <= (others => '-');
-	    end if;
-	    -- CPU, instruction bus
-	    if sdram_instr_strobe = '1' then
-		imem_data_ready(cpu) <= sdram_resp(instr_port).data_ready;
-		final_to_cpu_i(cpu) <= sdram_resp(instr_port).data_out;
-	    else
-		-- XXX assert address eror signal?
-		imem_data_ready(cpu) <= '1';
-		final_to_cpu_i(cpu) <= (others => '-');
-	    end if;
+	    final_to_cpu_d(0) <= io_to_cpu;
+	elsif sdram_data_strobe = '1' then
+	    dmem_data_ready(0) <= sdram_port0_data_ready;
+	    final_to_cpu_d(0) <= sdram_port0_data_out;
+	elsif xbus_addr_range then
+	    dmem_data_ready(0) <= xbus_ack;
+	    final_to_cpu_d(0) <= xbus_data_in;
+	else -- ROM, instruction bus only
+	    dmem_data_ready(0) <= '1';
+	    final_to_cpu_d(0) <= (others => '0');
 	end if;
-	-- CPU, data bus
-	sdram_req(data_port).strobe <= sdram_data_strobe;
-	sdram_req(data_port).burst_len(2 downto 0) <= dmem_burst_len(cpu);
-	sdram_req(data_port).write <= dmem_write(cpu);
-	sdram_req(data_port).byte_sel <= dmem_byte_sel(cpu);
-	sdram_req(data_port).addr <= dmem_addr(cpu);
-	sdram_req(data_port).data_in <= cpu_to_dmem(cpu);
-	-- CPU, instruction bus
-	sdram_req(instr_port).strobe <= sdram_instr_strobe;
-	sdram_req(instr_port).burst_len(2 downto 0) <= imem_burst_len(cpu);
-	sdram_req(instr_port).addr <= imem_addr(cpu);
-	sdram_req(instr_port).data_in <= (others => '-');
-	sdram_req(instr_port).write <= '0';
-	sdram_req(instr_port).byte_sel <= x"f";
-    end loop;
+
+	-- CPU 0, instruction bus
+	if sdram_instr_strobe = '1' then
+	    imem_data_ready(0) <= sdram_port1_data_ready;
+	    final_to_cpu_i(0) <= sdram_port1_data_out;
+	else
+	    imem_data_ready(0) <= rom_i_ready;
+	    final_to_cpu_i(0) <= rom_i_to_cpu;
+	end if;
+
+	-- Port 0 (data bus) signals
+	sdram_port0_addr_strobe <= sdram_data_strobe;
+	sdram_port0_burst_len <= dmem_burst_len(0);
+	sdram_port0_write <= dmem_write(0);
+	sdram_port0_byte_sel <= dmem_byte_sel(0);
+	sdram_port0_addr <= dmem_addr(0);
+	sdram_port0_data_in <= cpu_to_dmem(0);
+
+	-- Port 1 (instruction bus) signals - fixed values
+	sdram_port1_addr_strobe <= sdram_instr_strobe;
+	sdram_port1_burst_len <= imem_burst_len(0);
+	sdram_port1_addr <= imem_addr(0);
+	sdram_port1_data_in <= (others => '0');  -- instruction port never writes
+	sdram_port1_write <= '0';                 -- instruction port is read-only
+	sdram_port1_byte_sel <= x"f";             -- always read full word
     end process;
 
-    sdram: entity work.sdram_controller
+    sdram: entity work.sdram_controller_ghdl
     generic map (
-	C_ports => 2 * C_cpus,
+	C_ports => 2,
 	C_ras => C_ras, C_cas => C_cas, C_pre => C_pre,
 	C_clock_range => C_clock_range,
-	C_address_width => C_sdram_address_width,
-	C_column_bits => C_sdram_column_bits,
-	C_startup_cycles => C_sdram_startup_cycles,
-	C_cycles_per_refresh => C_sdram_cycles_per_refresh
+	sdram_address_width => C_sdram_address_width,
+	sdram_column_bits => C_sdram_column_bits,
+	sdram_startup_cycles => C_sdram_startup_cycles,
+	cycles_per_refresh => C_sdram_cycles_per_refresh
     )
     port map (
 	clk => clk, reset => res(0),
-	-- internal connections
-	req => sdram_req, resp => sdram_resp,
+	-- Port 0 (data)
+	port0_addr => sdram_port0_addr,
+	port0_data_in => sdram_port0_data_in,
+	port0_byte_sel => sdram_port0_byte_sel,
+	port0_addr_strobe => sdram_port0_addr_strobe,
+	port0_burst_len => sdram_port0_burst_len,
+	port0_write => sdram_port0_write,
+	port0_data_out => sdram_port0_data_out,
+	port0_data_ready => sdram_port0_data_ready,
+	-- Port 1 (instruction)
+	port1_addr => sdram_port1_addr,
+	port1_data_in => sdram_port1_data_in,
+	port1_byte_sel => sdram_port1_byte_sel,
+	port1_addr_strobe => sdram_port1_addr_strobe,
+	port1_burst_len => sdram_port1_burst_len,
+	port1_write => sdram_port1_write,
+	port1_data_out => sdram_port1_data_out,
+	port1_data_ready => sdram_port1_data_ready,
+	-- Snoop
 	snoop_cycle => snoop_cycle, snoop_addr => snoop_addr,
 	-- external SDRAM interface
 	sdram_addr => sdram_addr, sdram_data => sdram_data,
@@ -427,8 +448,8 @@ begin
     --
     -- I/O arbiter
     --
-    process(R_cur_io_port, dmem_addr, dmem_addr_strobe, io_addr_strobe)
-	variable t: integer;
+    process(R_cur_io_port, dmem_addr, dmem_addr_strobe)
+	variable i, j, t, cpu: integer;
     begin
     for cpu in 0 to (C_cpus - 1) loop
 	if dmem_addr(cpu)(31 downto 28) = x"f" then
@@ -455,10 +476,10 @@ begin
     -- I/O access
     --
     io_write <= dmem_write(R_cur_io_port);
-    io_addr <= '0' & dmem_addr(R_cur_io_port)(10 downto 2);
+    io_addr <=  '0' & dmem_addr(R_cur_io_port)(10 downto 2);
     io_byte_sel <= dmem_byte_sel(R_cur_io_port);
     cpu_to_io <= cpu_to_dmem(R_cur_io_port);
-    process(clk, io_addr_strobe, io_write, R_cur_io_port)
+    process(clk)
     begin
 	if rising_edge(clk) then
 	    -- IO arbiter
@@ -471,20 +492,23 @@ begin
 	    end if;
 
 	    -- CPU reset control
-	    R_cpu_reset(0) <= '0';
-	    if C_cpus > 1 and io_addr_strobe(R_cur_io_port) = '1'
-	      and io_write = '1' and io_addr(11 downto 4) = C_io_cpu_reset then
-		R_cpu_reset <= cpu_to_io(15 downto 0);
+	    if C_cpus /= 1 and io_addr_strobe(R_cur_io_port) = '1'
+	      and io_write = '1' and
+	      io_addr(11 downto 4) = F_io_from(C_io_cpu_reset) then
+		R_cpu_reset <= x"ff" & cpu_to_io(7 downto 0);
 	    end if;
 	    if reset = '1' then
 		R_cpu_reset <= (others => '1');
+	    elsif R_cpu_reset(0) = '1' then
+		R_cpu_reset(15 downto 8) <= R_cpu_reset(14 downto 8) & '0';
+		R_cpu_reset(0) <= R_cpu_reset(15);
 	    end if;
 	end if;
 	if rising_edge(clk) and io_addr_strobe(R_cur_io_port) = '1'
 	  and io_write = '1' then
 	    -- simple out
 	    if C_simple_out > 0 and
-	      io_addr(11 downto 4) = C_io_simple_out then
+	      io_addr(11 downto 4) = F_io_from(C_io_simple_out) then
 		if io_byte_sel(0) = '1' then
 		    R_simple_out(7 downto 0) <= cpu_to_io(7 downto 0);
 		end if;
@@ -506,29 +530,28 @@ begin
     -- RS232 SIO
     --
     G_sio: for i in 0 to C_sio - 1 generate
-	I_sio: entity work.sio
+	sio_instance: entity work.sio
 	generic map (
 	    C_clk_freq => C_clk_freq,
 	    C_init_baudrate => C_sio_init_baudrate,
 	    C_fixed_baudrate => C_sio_fixed_baudrate,
 	    C_break_detect => C_sio_break_detect,
-	    C_break_resets_baudrate => C_sio_break_detect
+	    C_break_resets_baudrate => C_sio_break_detect,
+	    C_big_endian => C_big_endian
 	)
 	port map (
-	    clk => clk, txd => sio_tx(i), rxd => sio_rx(i), ce => sio_ce(i),
-	    bus_write => io_write, bus_addr => io_addr(3 downto 2),
+	    clk => clk, ce => sio_ce(i), txd => sio_tx(i), rxd => sio_rx(i),
+	    bus_write => io_write, byte_sel => io_byte_sel,
 	    bus_in => cpu_to_io, bus_out => from_sio(i),
-	    rx_ready => sio_intr(i), break => sio_break(i)
+	    break => sio_break(i)
 	);
 	sio_ce(i) <= io_addr_strobe(R_cur_io_port) when sio_io_range and
 	  conv_integer(io_addr(5 downto 4)) = i else '0';
-	sio_txd(i) <= sio_tx(i) when not C_debug or i /= 0
-	  or debug_active = '0' else deb_tx;
     end generate;
-    sio_io_range <= io_addr(11 downto 4) = C_io_sio0
-      or io_addr(11 downto 4) = C_io_sio1
-      or io_addr(11 downto 4) = C_io_sio2
-      or io_addr(11 downto 4) = C_io_sio3;
+    G_sio_decoder: if C_sio > 0 generate
+    with conv_integer(io_addr(11 downto 4)) select sio_io_range <= true
+      when F_io_from(C_io_sio) to F_io_to(C_io_sio), false when others;
+    end generate;
     sio_rx(0) <= sio_rxd(0);
 
     --
@@ -537,23 +560,23 @@ begin
     G_spi: for i in 0 to C_spi - 1 generate
 	spi_instance: entity work.spi
 	generic map (
+	    C_turbo_mode => C_spi_turbo_mode(i) = '1',
 	    C_fixed_speed => C_spi_fixed_speed(i) = '1'
 	)
 	port map (
 	    clk => clk, ce => spi_ce(i),
 	    bus_write => io_write, byte_sel => io_byte_sel,
 	    bus_in => cpu_to_io, bus_out => from_spi(i),
-	    spi_sck => spi_sck(i), spi_cen(0) => spi_ss(i),
-	    spi_cen(3 downto 1) => spi_cen_unused(i),
+	    spi_sck => spi_sck(i), spi_cen => spi_ss(i),
 	    spi_miso => spi_miso(i), spi_mosi => spi_mosi(i)
 	);
 	spi_ce(i) <= io_addr_strobe(R_cur_io_port) when spi_io_range and
 	  conv_integer(io_addr(5 downto 4)) = i else '0';
     end generate;
-    spi_io_range <= io_addr(11 downto 4) = C_io_spi0
-      or io_addr(11 downto 4) = C_io_spi1
-      or io_addr(11 downto 4) = C_io_spi2
-      or io_addr(11 downto 4) = C_io_spi3;
+    G_spi_decoder: if C_spi > 0 generate
+    with conv_integer(io_addr(11 downto 4)) select spi_io_range <= true
+      when F_io_from(C_io_spi) to F_io_to(C_io_spi), false when others;
+    end generate;
 
     --
     -- RTC
@@ -570,41 +593,42 @@ begin
 	bus_in => cpu_to_io, bus_out => from_rtc
     );
     rtc_ce <= io_addr_strobe(R_cur_io_port) when rtc_io_range else '0';
-    rtc_io_range <= io_addr(11 downto 4) = C_io_rtc;
+    with conv_integer(io_addr(11 downto 4)) select rtc_io_range <= true
+      when F_io_from(C_io_rtc) to F_io_to(C_io_rtc), false when others;
     end generate;
 
     -- Address decoder when CPU reads IO
     process(io_addr, from_sio, from_spi, from_rtc, R_simple_in, R_simple_out)
     begin
 	io_to_cpu <= (others => '0');
-	case io_addr(11 downto 4) is
-	when C_io_sio0 | C_io_sio1 | C_io_sio2 | C_io_sio3 =>
+	case conv_integer(io_addr(11 downto 4)) is
+	when F_io_from(C_io_sio) to F_io_to(C_io_sio) =>
 	    for i in 0 to C_sio - 1 loop
 		if conv_integer(io_addr(5 downto 4)) = i then
 		    io_to_cpu <= from_sio(i);
 		end if;
 	    end loop;
-	when C_io_spi0 | C_io_spi1 | C_io_spi2 | C_io_spi3 =>
+	when F_io_from(C_io_spi) to F_io_to(C_io_spi) =>
 	    for i in 0 to C_spi - 1 loop
 		if conv_integer(io_addr(5 downto 4)) = i then
 		    io_to_cpu <= from_spi(i);
 		end if;
 	    end loop;
-	when C_io_simple_in =>
+	when F_io_from(C_io_simple_in) to F_io_to(C_io_simple_in) =>
 	    for i in 0 to (C_simple_in + 31) / 4 - 1 loop
 		if conv_integer(io_addr(3 downto 2)) = i then
 		    io_to_cpu(C_simple_in - i * 32 - 1 downto i * 32) <=
 		      R_simple_in(C_simple_in - i * 32 - 1 downto i * 32);
 		end if;
 	    end loop;
-	when C_io_simple_out =>
+	when F_io_from(C_io_simple_out) to F_io_to(C_io_simple_out) =>
 	    for i in 0 to (C_simple_out + 31) / 4 - 1 loop
 		if conv_integer(io_addr(3 downto 2)) = i then
 		    io_to_cpu(C_simple_out - i * 32 - 1 downto i * 32) <=
 		      R_simple_out(C_simple_out - i * 32 - 1 downto i * 32);
 		end if;
 	    end loop;
-	when C_io_rtc =>
+	when F_io_from(C_io_rtc) to F_io_to(C_io_rtc) =>
 	    io_to_cpu <= from_rtc;
 	when others  =>
 	    io_to_cpu <= (others => '0');
@@ -618,17 +642,22 @@ begin
     if C_debug generate
     debug_sio: entity work.sio
     generic map (
-	C_clk_freq => C_clk_freq
+	C_clk_freq => C_clk_freq,
+	C_big_endian => false
     )
     port map (
 	clk => clk, ce => '1', txd => deb_tx, rxd => sio_rxd(0),
-	bus_write => deb_sio_tx_strobe, bus_addr => "00", -- XXX fixme!
-	bus_in(31 downto 8) => x"000000",
+	bus_write => deb_sio_tx_strobe, byte_sel => "0001",
 	bus_in(7 downto 0) => debug_to_sio_data,
-	bus_out => debug_bus_out, break => open, rx_ready => open
+	bus_in(31 downto 8) => x"000000",
+	bus_out => debug_bus_out,
+	break => open
     );
+    sio_to_debug_data <= debug_bus_out(7 downto 0);
+    deb_sio_rx_done <= debug_bus_out(8);
     deb_sio_tx_busy <= debug_bus_out(10);
-    deb_sio_rx_done <= debug_bus_out(8); -- XXX fixme!
-    sio_to_debug_data <= debug_bus_out(7 downto 0); -- XXX fixme!
     end generate;
+
+    sio_txd(0) <= sio_tx(0) when not C_debug or debug_active = '0' else deb_tx;
+
 end Behavioral;
