@@ -1,0 +1,55 @@
+# f32c sdram_min Synthesis Debug Script - V5
+# Check resource usage at different stages
+
+ghdl --ieee=synopsys -fexplicit -frelaxed-rules --latches --work=work \
+  /projects/f32c/rtl/cpu/defs_mi32.vhd \
+  /projects/f32c/rtl/cpu/defs_rv32.vhd \
+  /projects/f32c/rtl/cpu/defs_f32c.vhd \
+  /projects/f32c/rtl/cpu/idecode_mi32.vhd \
+  /projects/f32c/rtl/cpu/idecode_rv32.vhd \
+  /projects/f32c/rtl/cpu/debug.vhd \
+  /projects/f32c/rtl/cpu/alu.vhd \
+  /projects/f32c/rtl/cpu/shift.vhd \
+  /projects/f32c/rtl/cpu/loadalign.vhd \
+  /projects/f32c/rtl/cpu/mul_dsp.vhd \
+  /projects/f32c/rtl/generic/bptrace.vhd \
+  /projects/f32c/rtl/generic/reg1w2r.vhd \
+  /projects/f32c/rtl/cpu/pipeline.vhd \
+  /projects/f32c-valent/rtl/cpu/cache_ghdl.vhd \
+  /projects/f32c/rtl/generic/bram_true2p_1clk.vhd \
+  /projects/f32c/rtl/generic/bootloader/defs_bootblock.vhd \
+  /projects/f32c/rtl/generic/bootloader/boot_sio_rv32el.vhd \
+  /projects/f32c/rtl/generic/bootloader/boot_sio_mi32el.vhd \
+  /projects/f32c/rtl/generic/bootloader/boot_sio_mi32eb.vhd \
+  /projects/f32c/rtl/generic/bootloader/boot_rom_mi32el.vhd \
+  ./sdram_controller_ghdl.vhd \
+  /projects/f32c/rtl/soc/sio.vhd \
+  /projects/f32c/rtl/soc/spi.vhd \
+  /projects/f32c/rtl/soc/rtc.vhd \
+  /projects/f32c/rtl/generic/rom.vhd \
+  ./glue_sdram_min_ghdl_v5.vhd \
+  /projects/f32c/rtl/lattice/chip/ecp5u/ecp5pll.vhd \
+  /projects/f32c/rtl/lattice/chip/ecp5u/ecp5_flash_clk.vhd \
+  ./top_sdram_min_v3.vhd \
+  -e top_sdram
+
+# Stage 1: After GHDL import
+hierarchy -top top_sdram
+log *** STAGE 1: AFTER GHDL IMPORT ***
+stat
+
+# Stage 2: Proc and memory
+proc
+memory
+log *** STAGE 2: AFTER PROC AND MEMORY ***
+stat
+
+# Stage 3: Flatten
+flatten
+log *** STAGE 3: AFTER FLATTEN ***
+stat
+
+# Stage 4: Opt
+opt -full
+log *** STAGE 4: AFTER OPT ***
+stat

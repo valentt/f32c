@@ -1,0 +1,28 @@
+# f32c sdram_min Synthesis Script - CORRECTED VERSION
+# Uses ecp5pll.vhd and ecp5_flash_clk.vhd instead of broken stubs
+# NO stubs.vhd - uses COMPONENT declarations for ECP5 primitives
+
+ghdl --std=08 --ieee=synopsys -fexplicit -frelaxed-rules --latches --work=work \
+  ../../../../cpu/defs_mi32.vhd \
+  ../../../../cpu/defs_rv32.vhd \
+  ../../../../cpu/defs_f32c.vhd \
+  ../../../../cpu/idecode_mi32.vhd \
+  ../../../../cpu/idecode_rv32.vhd \
+  ../../../../cpu/debug.vhd \
+  ../../../../cpu/f32c_cache.vhd \
+  ../../../../cpu/f32c_core.vhd \
+  ../../../../generic/bram_true2p_1clk.vhd \
+  ../../../../soc/sdram_pack.vhd \
+  ../../../../soc/sdram_mz.vhd \
+  ../../../../soc/sio.vhd \
+  ../../../../soc/spi.vhd \
+  ../../../../soc/rom.vhd \
+  ../../../../soc/rtc.vhd \
+  ./glue_sdram_min_ghdl.vhd \
+  ../../../../lattice/chip/ecp5u/ecp5pll.vhd \
+  ../../../../lattice/chip/ecp5u/ecp5_flash_clk.vhd \
+  ./top_sdram_min_v2.vhd \
+  -e top_sdram
+
+# Synthesize for ECP5 - 12F target
+synth_ecp5 -top top_sdram -json sdram_min_v2.json
