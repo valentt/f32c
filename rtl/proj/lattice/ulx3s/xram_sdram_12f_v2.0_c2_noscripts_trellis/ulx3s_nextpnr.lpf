@@ -1,0 +1,165 @@
+# ULX3S LPF for nextpnr-ecp5 (xram_sdram c2)
+# Based on ulx3s_v20.lpf, stripped of unsupported IOBUF commands
+# For f32c with SDRAM, LEDs, UART, SPI Flash, SD card, GPDI
+
+# Input Clock (25 MHz)
+LOCATE COMP "clk_25mhz" SITE "G2";
+FREQUENCY PORT "clk_25mhz" 25 MHZ;
+
+# PLL Generated Clocks
+FREQUENCY NET "clk" 100 MHZ;
+
+# UART (directly on ftdi pins)
+LOCATE COMP "ftdi_txd" SITE "M1";
+LOCATE COMP "ftdi_rxd" SITE "L4";
+
+# LEDs
+LOCATE COMP "led[0]" SITE "B2";
+LOCATE COMP "led[1]" SITE "C2";
+LOCATE COMP "led[2]" SITE "C1";
+LOCATE COMP "led[3]" SITE "D2";
+LOCATE COMP "led[4]" SITE "D1";
+LOCATE COMP "led[5]" SITE "E2";
+LOCATE COMP "led[6]" SITE "E1";
+LOCATE COMP "led[7]" SITE "H3";
+
+# Buttons
+LOCATE COMP "btn[0]" SITE "D6";
+LOCATE COMP "btn[1]" SITE "R1";
+LOCATE COMP "btn[2]" SITE "T1";
+LOCATE COMP "btn[3]" SITE "R18";
+LOCATE COMP "btn[4]" SITE "V1";
+LOCATE COMP "btn[5]" SITE "U1";
+LOCATE COMP "btn[6]" SITE "H16";
+
+# Switches
+LOCATE COMP "sw[0]" SITE "E8";
+LOCATE COMP "sw[1]" SITE "D8";
+LOCATE COMP "sw[2]" SITE "D7";
+LOCATE COMP "sw[3]" SITE "E7";
+
+# SDRAM
+LOCATE COMP "sdram_clk" SITE "F19";
+LOCATE COMP "sdram_cke" SITE "F20";
+LOCATE COMP "sdram_csn" SITE "P20";
+LOCATE COMP "sdram_wen" SITE "T20";
+LOCATE COMP "sdram_rasn" SITE "R20";
+LOCATE COMP "sdram_casn" SITE "T19";
+LOCATE COMP "sdram_a[0]" SITE "M20";
+LOCATE COMP "sdram_a[1]" SITE "M19";
+LOCATE COMP "sdram_a[2]" SITE "L20";
+LOCATE COMP "sdram_a[3]" SITE "L19";
+LOCATE COMP "sdram_a[4]" SITE "K20";
+LOCATE COMP "sdram_a[5]" SITE "K19";
+LOCATE COMP "sdram_a[6]" SITE "K18";
+LOCATE COMP "sdram_a[7]" SITE "J20";
+LOCATE COMP "sdram_a[8]" SITE "J19";
+LOCATE COMP "sdram_a[9]" SITE "H20";
+LOCATE COMP "sdram_a[10]" SITE "N19";
+LOCATE COMP "sdram_a[11]" SITE "G20";
+LOCATE COMP "sdram_a[12]" SITE "G19";
+LOCATE COMP "sdram_ba[0]" SITE "P19";
+LOCATE COMP "sdram_ba[1]" SITE "N20";
+LOCATE COMP "sdram_dqm[0]" SITE "U19";
+LOCATE COMP "sdram_dqm[1]" SITE "E20";
+LOCATE COMP "sdram_d[0]" SITE "J16";
+LOCATE COMP "sdram_d[1]" SITE "L18";
+LOCATE COMP "sdram_d[2]" SITE "M18";
+LOCATE COMP "sdram_d[3]" SITE "N18";
+LOCATE COMP "sdram_d[4]" SITE "P18";
+LOCATE COMP "sdram_d[5]" SITE "T18";
+LOCATE COMP "sdram_d[6]" SITE "T17";
+LOCATE COMP "sdram_d[7]" SITE "U20";
+LOCATE COMP "sdram_d[8]" SITE "E19";
+LOCATE COMP "sdram_d[9]" SITE "D20";
+LOCATE COMP "sdram_d[10]" SITE "D19";
+LOCATE COMP "sdram_d[11]" SITE "C20";
+LOCATE COMP "sdram_d[12]" SITE "E18";
+LOCATE COMP "sdram_d[13]" SITE "F18";
+LOCATE COMP "sdram_d[14]" SITE "J18";
+LOCATE COMP "sdram_d[15]" SITE "J17";
+
+# Flash SPI
+LOCATE COMP "flash_csn" SITE "R2";
+LOCATE COMP "flash_mosi" SITE "W2";
+LOCATE COMP "flash_miso" SITE "V2";
+LOCATE COMP "flash_wpn" SITE "Y2";
+LOCATE COMP "flash_holdn" SITE "W1";
+
+# SD Card
+LOCATE COMP "sd_clk" SITE "H2";
+LOCATE COMP "sd_cmd" SITE "J1";
+LOCATE COMP "sd_d[0]" SITE "J3";
+LOCATE COMP "sd_d[1]" SITE "H1";
+LOCATE COMP "sd_d[2]" SITE "K1";
+LOCATE COMP "sd_d[3]" SITE "K2";
+LOCATE COMP "sd_cdn" SITE "N5";
+LOCATE COMP "sd_wp" SITE "P5";
+
+# GPDI (directly active accent accent accent accent accent accent accent accent)
+LOCATE COMP "gpdi_dp[0]" SITE "A16";
+LOCATE COMP "gpdi_dn[0]" SITE "B16";
+LOCATE COMP "gpdi_dp[1]" SITE "A14";
+LOCATE COMP "gpdi_dn[1]" SITE "C14";
+LOCATE COMP "gpdi_dp[2]" SITE "A12";
+LOCATE COMP "gpdi_dn[2]" SITE "A13";
+LOCATE COMP "gpdi_dp[3]" SITE "A17";
+LOCATE COMP "gpdi_dn[3]" SITE "B18";
+
+# GPIO accent accent accent accent (accent accent accent accent accent accent accent accent accent accent accent accent accent)
+LOCATE COMP "gp[0]" SITE "B11";
+LOCATE COMP "gn[0]" SITE "C11";
+LOCATE COMP "gp[1]" SITE "A10";
+LOCATE COMP "gn[1]" SITE "A11";
+LOCATE COMP "gp[2]" SITE "A9";
+LOCATE COMP "gn[2]" SITE "B10";
+LOCATE COMP "gp[3]" SITE "B9";
+LOCATE COMP "gn[3]" SITE "C10";
+LOCATE COMP "gp[4]" SITE "A7";
+LOCATE COMP "gn[4]" SITE "A8";
+LOCATE COMP "gp[5]" SITE "C8";
+LOCATE COMP "gn[5]" SITE "B8";
+LOCATE COMP "gp[6]" SITE "C6";
+LOCATE COMP "gn[6]" SITE "B6";
+LOCATE COMP "gp[7]" SITE "A6";
+LOCATE COMP "gn[7]" SITE "B5";
+LOCATE COMP "gp[8]" SITE "A4";
+LOCATE COMP "gn[8]" SITE "A5";
+LOCATE COMP "gp[9]" SITE "A2";
+LOCATE COMP "gn[9]" SITE "B1";
+LOCATE COMP "gp[10]" SITE "C4";
+LOCATE COMP "gn[10]" SITE "B4";
+LOCATE COMP "gp[11]" SITE "F4";
+LOCATE COMP "gn[11]" SITE "E3";
+LOCATE COMP "gp[12]" SITE "G3";
+LOCATE COMP "gn[12]" SITE "F3";
+LOCATE COMP "gp[13]" SITE "H4";
+LOCATE COMP "gn[13]" SITE "G5";
+LOCATE COMP "gp[14]" SITE "U18";
+LOCATE COMP "gn[14]" SITE "U17";
+LOCATE COMP "gp[15]" SITE "N17";
+LOCATE COMP "gn[15]" SITE "P16";
+LOCATE COMP "gp[16]" SITE "N16";
+LOCATE COMP "gn[16]" SITE "M17";
+LOCATE COMP "gp[17]" SITE "L16";
+LOCATE COMP "gn[17]" SITE "L17";
+LOCATE COMP "gp[18]" SITE "H18";
+LOCATE COMP "gn[18]" SITE "H17";
+LOCATE COMP "gp[19]" SITE "F17";
+LOCATE COMP "gn[19]" SITE "G18";
+LOCATE COMP "gp[20]" SITE "D18";
+LOCATE COMP "gn[20]" SITE "E17";
+LOCATE COMP "gp[21]" SITE "C18";
+LOCATE COMP "gn[21]" SITE "D17";
+LOCATE COMP "gp[22]" SITE "B15";
+LOCATE COMP "gn[22]" SITE "C15";
+LOCATE COMP "gp[23]" SITE "B17";
+LOCATE COMP "gn[23]" SITE "C17";
+LOCATE COMP "gp[24]" SITE "C16";
+LOCATE COMP "gn[24]" SITE "D16";
+LOCATE COMP "gp[25]" SITE "D14";
+LOCATE COMP "gn[25]" SITE "E14";
+LOCATE COMP "gp[26]" SITE "B13";
+LOCATE COMP "gn[26]" SITE "C13";
+LOCATE COMP "gp[27]" SITE "D13";
+LOCATE COMP "gn[27]" SITE "E13";

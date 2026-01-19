@@ -1,6 +1,10 @@
 # f32c XRAM SDRAM build for open-source toolchain
 # Includes USB SIO for serial communication (mandatory)
 # Disabled: VGA compositing, VGA_textmode (GHDL issues)
+#
+# GHDL FIX: Uses f32c_cache_ghdl.vhd (local) instead of ../../../../cpu/f32c_cache.vhd
+# This fixes the unused M_i_bram signal that caused 8x LUT overhead
+#
 
 ghdl --std=08 --ieee=synopsys -fexplicit -frelaxed-rules --latches --work=work \
   ./stubs.vhd \
@@ -10,7 +14,7 @@ ghdl --std=08 --ieee=synopsys -fexplicit -frelaxed-rules --latches --work=work \
   ../../../../cpu/idecode_mi32.vhd \
   ../../../../cpu/idecode_rv32.vhd \
   ../../../../cpu/debug.vhd \
-  ../../../../cpu/f32c_cache.vhd \
+  ./f32c_cache_ghdl.vhd \
   ../../../../cpu/f32c_core.vhd \
   ../../../../generic/bootloader/defs_bootblock.vhd \
   ../../../../generic/bootloader/boot_sio_rv32el.vhd \

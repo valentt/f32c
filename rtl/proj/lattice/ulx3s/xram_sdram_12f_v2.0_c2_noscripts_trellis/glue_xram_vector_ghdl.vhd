@@ -632,7 +632,8 @@ begin
     S_reset <= reset or sio_break_internal(0);
 
     -- f32c core
-    cpu: entity work.f32c_cache
+    -- GHDL FIX: use f32c_cache_ghdl instead of f32c_cache
+    cpu: entity work.f32c_cache_ghdl
     generic map (
       C_arch => C_arch, C_cpuid => 0, -- C_clk_freq => C_clk_freq,
       C_regfile_synchronous_read => C_regfile_synchronous_read,
