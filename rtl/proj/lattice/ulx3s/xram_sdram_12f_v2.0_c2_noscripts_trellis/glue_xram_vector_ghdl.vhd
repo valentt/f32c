@@ -999,9 +999,9 @@ begin
 	sio_break(i) <= sio_break_internal(i);
     end generate;
     G_sio_decoder: if C_sio > 0 generate
-    with conv_integer(io_addr(11 downto 4)) select
-      sio_range <= '1' when iomap_from(iomap_sio, iomap_range) to iomap_to(iomap_sio, iomap_range),
-                   '0' when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    sio_range <= '1' when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_sio, iomap_range) and
+                           conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_sio, iomap_range)) else '0';
     end generate;
     sio_rx(0) <= sio_rxd(0);
 
@@ -1028,9 +1028,9 @@ begin
         end generate;
     end generate; -- G_spi_enabled
     G_spi_decoder: if C_spi > 0 generate
-    with conv_integer(io_addr(11 downto 4)) select
-      spi_range <= '1' when iomap_from(iomap_spi, iomap_range) to iomap_to(iomap_spi, iomap_range),
-                   '0' when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    spi_range <= '1' when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_spi, iomap_range) and
+                           conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_spi, iomap_range)) else '0';
     end generate;
 
     --
@@ -1048,9 +1048,9 @@ begin
 	bus_in => cpu_to_dmem, bus_out => from_rtc
     );
     rtc_ce <= io_addr_strobe when rtc_io_range else '0';
-    with conv_integer(io_addr(11 downto 4)) select rtc_io_range <= true
-      when iomap_from(C_io_rtc, iomap_range) to iomap_to(C_io_rtc, iomap_range),
-      false when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    rtc_io_range <= true when (conv_integer(io_addr(11 downto 4)) >= iomap_from(C_io_rtc, iomap_range) and
+                               conv_integer(io_addr(11 downto 4)) <= iomap_to(C_io_rtc, iomap_range)) else false;
     end generate;
 
     --
@@ -1091,63 +1091,63 @@ begin
     end generate;
 
     -- big address decoder when CPU reads IO
+    -- GHDL fix: use if-elsif instead of case with function range (not locally static)
     process(io_addr, R_simple_in, R_simple_out, from_sio, from_rtc, from_spi,
       from_timer, from_gpio, from_vga_textmode)
         variable i: integer;
+        variable v_addr: integer;
     begin
         io_to_cpu <= (others => '-');
-        case conv_integer(io_addr(11 downto 4)) is
-        when iomap_from(iomap_gpio, iomap_range) to iomap_to(iomap_gpio, iomap_range) =>
+        v_addr := conv_integer(io_addr(11 downto 4));
+
+        if v_addr >= iomap_from(iomap_gpio, iomap_range) and v_addr <= iomap_to(iomap_gpio, iomap_range) then
             for i in 0 to C_gpios - 1 loop
                 if conv_integer(io_addr(6 downto 5)) = i then
                     io_to_cpu <= from_gpio(i);
                 end if;
             end loop;
-        when iomap_from(iomap_timer, iomap_range) to iomap_to(iomap_timer, iomap_range) =>
+        elsif v_addr >= iomap_from(iomap_timer, iomap_range) and v_addr <= iomap_to(iomap_timer, iomap_range) then
 	    if C_timer then
                 io_to_cpu <= from_timer;
             end if;
-        when iomap_from(iomap_vector, iomap_range) to iomap_to(iomap_vector, iomap_range) =>
+        elsif v_addr >= iomap_from(iomap_vector, iomap_range) and v_addr <= iomap_to(iomap_vector, iomap_range) then
 	    if C_vector then
                 io_to_cpu <= from_vector;
             end if;
-        when iomap_from(iomap_sio, iomap_range) to iomap_to(iomap_sio, iomap_range) =>
+        elsif v_addr >= iomap_from(iomap_sio, iomap_range) and v_addr <= iomap_to(iomap_sio, iomap_range) then
             for i in 0 to C_sio - 1 loop
                 if conv_integer(io_addr(5 downto 4)) = i then
                     io_to_cpu <= from_sio(i);
                 end if;
             end loop;
-        when iomap_from(iomap_spi, iomap_range) to iomap_to(iomap_spi, iomap_range) =>
+        elsif v_addr >= iomap_from(iomap_spi, iomap_range) and v_addr <= iomap_to(iomap_spi, iomap_range) then
             for i in 0 to C_spi - 1 loop
                 if conv_integer(io_addr(5 downto 4)) = i then
                     io_to_cpu <= from_spi(i);
                 end if;
             end loop;
-        when iomap_from(iomap_pid, iomap_range) to iomap_to(iomap_pid, iomap_range) =>
+        elsif v_addr >= iomap_from(iomap_pid, iomap_range) and v_addr <= iomap_to(iomap_pid, iomap_range) then
             if C_pid then
                 io_to_cpu <= from_pid;
             end if;
-        when iomap_from(iomap_fmrds, iomap_range) to iomap_to(iomap_fmrds, iomap_range) =>
+        elsif v_addr >= iomap_from(iomap_fmrds, iomap_range) and v_addr <= iomap_to(iomap_fmrds, iomap_range) then
             if C_fmrds then
                 io_to_cpu <= from_fmrds;
             end if;
-        when iomap_from(iomap_simple_in, iomap_range) to iomap_to(iomap_simple_in, iomap_range) =>
+        elsif v_addr >= iomap_from(iomap_simple_in, iomap_range) and v_addr <= iomap_to(iomap_simple_in, iomap_range) then
             for i in 0 to (C_simple_in + 31) / 32 - 1 loop
                 if conv_integer(io_addr(3 downto 2)) = i then
                   io_to_cpu <= R_simple_in(32*i+31 downto 32*i);
                 end if;
             end loop;
-        when iomap_from(iomap_simple_out, iomap_range) to iomap_to(iomap_simple_out, iomap_range) =>
+        elsif v_addr >= iomap_from(iomap_simple_out, iomap_range) and v_addr <= iomap_to(iomap_simple_out, iomap_range) then
             for i in 0 to (C_simple_out + 31) / 32 - 1 loop
                 if conv_integer(io_addr(3 downto 2)) = i then
                   io_to_cpu <= R_simple_out(32*i+31 downto 32*i);
                 end if;
             end loop;
         -- vgahdmi, ledstrip and textmode share the same iomap addresses
-        -- we can specify only one otherwise error confilict will be generated
-        --when iomap_from(iomap_vga, iomap_range) to iomap_to(iomap_vga, iomap_range) =>
-        --when iomap_from(iomap_ledstrip, iomap_range) to iomap_to(iomap_ledstrip, iomap_range) =>
-        when iomap_from(iomap_vga_textmode, iomap_range) to iomap_to(iomap_vga_textmode, iomap_range) =>
+        elsif v_addr >= iomap_from(iomap_vga_textmode, iomap_range) and v_addr <= iomap_to(iomap_vga_textmode, iomap_range) then
             if C_tv then
                 io_to_cpu <= (others => S_vga_vblank); -- XXX fixme sync too short, get correct blank
             end if;
@@ -1160,17 +1160,17 @@ begin
             if C_vgatext then
                 io_to_cpu <= from_vga_textmode;
             end if;
-        when iomap_from(iomap_pcm, iomap_range) to iomap_to(iomap_pcm, iomap_range) =>
+        elsif v_addr >= iomap_from(iomap_pcm, iomap_range) and v_addr <= iomap_to(iomap_pcm, iomap_range) then
             if C_pcm then
                 io_to_cpu <= from_pcm;
             else
                 io_to_cpu <= (others => '-');
             end if;
-	when iomap_from(C_io_rtc, iomap_range) to iomap_to(C_io_rtc, iomap_range) =>
+        elsif v_addr >= iomap_from(C_io_rtc, iomap_range) and v_addr <= iomap_to(C_io_rtc, iomap_range) then
 	    io_to_cpu <= from_rtc;
-        when others  =>
+        else
             io_to_cpu <= (others => '-');
-        end case;
+        end if;
     end process;
 
     -- GPIO
@@ -1190,9 +1190,9 @@ begin
         gpio_ce(i) <= io_addr_strobe when conv_integer(io_addr(11 downto 5)) = i else '0';
     end generate;
     G_gpio_decoder_intr: if C_gpios > 0 generate
-        with conv_integer(io_addr(11 downto 4)) select
-          gpio_range <= '1' when iomap_from(iomap_gpio, iomap_range) to iomap_to(iomap_gpio, iomap_range),
-                        '0' when others;
+        -- GHDL fix: use conditional assignment instead of select with function range
+        gpio_range <= '1' when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_gpio, iomap_range) and
+                                conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_gpio, iomap_range)) else '0';
         gpio_intr_joint <= gpio_intr(0);
         -- TODO: currently only 32 gpio supported in fpgarduino core
         -- when support for 128 gpio is there we should use this:
@@ -1223,9 +1223,9 @@ begin
       bridge_f_out => pid_bridge_f_out,
       bridge_r_out => pid_bridge_r_out
     );
-    with conv_integer(io_addr(11 downto 4)) select
-      pid_ce <= io_addr_strobe when iomap_from(iomap_pid, iomap_range) to iomap_to(iomap_pid, iomap_range),
-                           '0' when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    pid_ce <= io_addr_strobe when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_pid, iomap_range) and
+                                   conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_pid, iomap_range)) else '0';
     pid_bridge_f <= pid_bridge_f_out;
     pid_bridge_r <= pid_bridge_r_out;
     end generate;
@@ -1252,9 +1252,9 @@ begin
       icp => icp -- input capture signal
     );
     ocp <= S_ocp;
-    with conv_integer(io_addr(11 downto 4)) select
-      timer_ce <= io_addr_strobe when iomap_from(iomap_timer, iomap_range) to iomap_to(iomap_timer, iomap_range),
-                             '0' when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    timer_ce <= io_addr_strobe when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_timer, iomap_range) and
+                                     conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_timer, iomap_range)) else '0';
     end generate;
 
     -- Vector processor
@@ -1367,9 +1367,9 @@ begin
         S_vector_ram_rdata <= from_xram;
       end generate;
 
-      with conv_integer(io_addr(11 downto 4)) select
-        vector_ce <= io_addr_strobe when iomap_from(iomap_vector, iomap_range) to iomap_to(iomap_vector, iomap_range),
-                               '0' when others;
+      -- GHDL fix: use conditional assignment instead of select with function range
+      vector_ce <= io_addr_strobe when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_vector, iomap_range) and
+                                        conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_vector, iomap_range)) else '0';
     end generate;
 
     -- TV PAL composite signal generation
@@ -1420,9 +1420,9 @@ begin
       vsync => S_tv_vsync -- output, 1 short pulse before every new frame
     );
     -- address decoder to set base address and clear interrupts
-    with conv_integer(io_addr(11 downto 4)) select
-      vga_ce <= io_addr_strobe when iomap_from(iomap_vga, iomap_range) to iomap_to(iomap_vga, iomap_range),
-                           '0' when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    vga_ce <= io_addr_strobe when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_vga, iomap_range) and
+                                   conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_vga, iomap_range)) else '0';
     process(clk)
     begin
         if rising_edge(clk) then
@@ -1457,9 +1457,9 @@ begin
     G_video_base_addr_out:
     if C_video_base_addr_out generate
     -- address decoder to set base address and clear interrupts
-    with conv_integer(io_addr(11 downto 4)) select
-      vga_ce <= io_addr_strobe when iomap_from(iomap_vga, iomap_range) to iomap_to(iomap_vga, iomap_range),
-                           '0' when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    vga_ce <= io_addr_strobe when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_vga, iomap_range) and
+                                   conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_vga, iomap_range)) else '0';
     process(clk)
     begin
         if rising_edge(clk) then
@@ -1784,9 +1784,9 @@ begin
     end generate;
 
     -- address decoder to set base address and clear interrupts
-    with conv_integer(io_addr(11 downto 4)) select
-      vga_ce <= io_addr_strobe when iomap_from(iomap_vga, iomap_range) to iomap_to(iomap_vga, iomap_range),
-                           '0' when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    vga_ce <= io_addr_strobe when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_vga, iomap_range) and
+                                   conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_vga, iomap_range)) else '0';
     process(clk)
     begin
         if rising_edge(clk) then
@@ -1819,9 +1819,9 @@ begin
     G_ledstrip_module:
     if C_ledstrip generate
       -- address decoder to handle mmaped io registers
-      with conv_integer(io_addr(11 downto 4)) select
-        ledstrip_ce <= io_addr_strobe when iomap_from(iomap_ledstrip, iomap_range) to iomap_to(iomap_ledstrip, iomap_range),
-                                  '0' when others;
+      -- GHDL fix: use conditional assignment instead of select with function range
+      ledstrip_ce <= io_addr_strobe when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_ledstrip, iomap_range) and
+                                          conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_ledstrip, iomap_range)) else '0';
       ledstrip_driver: entity work.ledstrip
       generic map (
         C_clk_Hz => C_clk_freq*1000000, -- module timing needs to know clk freq in Hz
@@ -2106,9 +2106,9 @@ begin
                                else '0';
       end generate; -- G_vgatext_bram8_wr
 
-      with conv_integer(io_addr(11 downto 4)) select
-        vga_textmode_ce <= io_addr_strobe when iomap_from(iomap_vga_textmode, iomap_range) to iomap_to(iomap_vga_textmode, iomap_range),
-        '0' when others;
+      -- GHDL fix: use conditional assignment instead of select with function range
+      vga_textmode_ce <= io_addr_strobe when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_vga_textmode, iomap_range) and
+                                              conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_vga_textmode, iomap_range)) else '0';
 
     end generate; -- G_vgatext
 
@@ -2127,9 +2127,9 @@ begin
       out_pcm_l => pcm_bus_l, out_pcm_r => pcm_bus_r,
       out_r => pwm_r, out_l => pwm_l
     );
-    with conv_integer(io_addr(11 downto 4)) select
-      pcm_ce <= io_addr_strobe when iomap_from(iomap_pcm, iomap_range) to iomap_to(iomap_pcm, iomap_range),
-                           '0' when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    pcm_ce <= io_addr_strobe when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_pcm, iomap_range) and
+                                   conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_pcm, iomap_range)) else '0';
     G_yes_pcm_dacpwm: if C_dacpwm generate
       pcm_l_dacpwm: entity work.dacpwm
       generic map
@@ -2189,9 +2189,9 @@ begin
       io_bus_in => cpu_to_dmem, -- io_bus_out => from_synth,
       pcm_out => pcm_synth
     );
-    with conv_integer(io_addr(11 downto 4)) select
-      synth_ce <= io_addr_strobe when iomap_from(iomap_synth, iomap_range) to iomap_to(iomap_synth, iomap_range),
-                           '0' when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    synth_ce <= io_addr_strobe when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_synth, iomap_range) and
+                                     conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_synth, iomap_range)) else '0';
     G_yes_synth_dacpwm: if C_dacpwm generate
       synth_dacpwm: entity work.dacpwm
       generic map
@@ -2298,9 +2298,9 @@ begin
       pwm_out_right => pwm_filt_r,
       fm_antenna => fm_antenna
     );
-    with conv_integer(io_addr(11 downto 4)) select
-      fmrds_ce <= io_addr_strobe when iomap_from(iomap_fmrds, iomap_range) to iomap_to(iomap_fmrds, iomap_range),
-                             '0' when others;
+    -- GHDL fix: use conditional assignment instead of select with function range
+    fmrds_ce <= io_addr_strobe when (conv_integer(io_addr(11 downto 4)) >= iomap_from(iomap_fmrds, iomap_range) and
+                                     conv_integer(io_addr(11 downto 4)) <= iomap_to(iomap_fmrds, iomap_range)) else '0';
     end generate;
 
 
